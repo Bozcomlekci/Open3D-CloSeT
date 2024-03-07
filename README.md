@@ -1,6 +1,29 @@
+# Modifications
+
+Repository contains modified Open3D needed for our CloSe-T.
+
+Most of the changes are made in `./cpp/open3d/visualization/visualizer/O3DVisualizer.cpp`.
+Eg. to change the classes or labels corresponding to class names, see `./cpp/open3d/visualization/visualizer/O3DVisualizer.cpp`
+To run CloSe-T, see [CloSe](https://github.com/anticdimi/CloSe.git) repo.
+
+#### Build
+
+Run script `./make.sh`.
+
+`IMPORTANT`: Check the script and alter it according to your system. Set the `shebang` for your shell, activate the `conda env` you use for this project.
+
+---
+
+
+
+
+
 <p align="center">
+
 <img src="https://raw.githubusercontent.com/isl-org/Open3D/main/docs/_static/open3d_logo_horizontal.png" width="320" />
+
 </p>
+
 
 # Open3D: A Modern Library for 3D Data Processing
 
@@ -30,15 +53,15 @@ the open-source community.
 
 **Core features of Open3D include:**
 
--   3D data structures
--   3D data processing algorithms
--   Scene reconstruction
--   Surface alignment
--   3D visualization
--   Physically based rendering (PBR)
--   3D machine learning support with PyTorch and TensorFlow
--   GPU acceleration for core 3D operations
--   Available in C++ and Python
+- 3D data structures
+- 3D data processing algorithms
+- Scene reconstruction
+- Surface alignment
+- 3D visualization
+- Physically based rendering (PBR)
+- 3D machine learning support with PyTorch and TensorFlow
+- GPU acceleration for core 3D operations
+- Available in C++ and Python
 
 Here's a brief overview of the different components of Open3D and how they fit
 together to enable full end to end pipelines:
@@ -79,14 +102,14 @@ To compile Open3D from source, refer to
 
 Checkout the following links to get started with Open3D C++ API
 
--   Download Open3D binary package: [Release](https://github.com/isl-org/Open3D/releases) or [latest development version](https://www.open3d.org/docs/latest/getting_started.html#c)
--   [Compiling Open3D from source](https://www.open3d.org/docs/release/compilation.html)
--   [Open3D C++ API](https://www.open3d.org/docs/release/cpp_api.html)
+- Download Open3D binary package: [Release](https://github.com/isl-org/Open3D/releases) or [latest development version](https://www.open3d.org/docs/latest/getting_started.html#c)
+- [Compiling Open3D from source](https://www.open3d.org/docs/release/compilation.html)
+- [Open3D C++ API](https://www.open3d.org/docs/release/cpp_api.html)
 
 To use Open3D in your C++ project, checkout the following examples
 
--   [Find Pre-Installed Open3D Package in CMake](https://github.com/isl-org/open3d-cmake-find-package)
--   [Use Open3D as a CMake External Project](https://github.com/isl-org/open3d-cmake-external-project)
+- [Find Pre-Installed Open3D Package in CMake](https://github.com/isl-org/open3d-cmake-find-package)
+- [Use Open3D as a CMake External Project](https://github.com/isl-org/open3d-cmake-external-project)
 
 ## Open3D-Viewer app
 
@@ -107,11 +130,11 @@ top of the Open3D core library and extends it with machine learning tools for
 
 ## Communication channels
 
--   [GitHub Issue](https://github.com/isl-org/Open3D/issues): bug reports,
-    feature requests, etc.
--   [Forum](https://github.com/isl-org/Open3D/discussions): discussion on the usage of Open3D.
--   [Discord Chat](https://discord.gg/D35BGvn): online chats, discussions,
-    and collaboration with other users and developers.
+- [GitHub Issue](https://github.com/isl-org/Open3D/issues): bug reports,
+  feature requests, etc.
+- [Forum](https://github.com/isl-org/Open3D/discussions): discussion on the usage of Open3D.
+- [Discord Chat](https://discord.gg/D35BGvn): online chats, discussions,
+  and collaboration with other users and developers.
 
 ## Citation
 

@@ -1,8 +1,27 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// Copyright (c) 2018-2023 www.open3d.org
-// SPDX-License-Identifier: MIT
+// The MIT License (MIT)
+//
+// Copyright (c) 2018-2021 www.open3d.org
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
 // ----------------------------------------------------------------------------
 
 #include "open3d/visualization/visualizer/O3DVisualizer.h"
@@ -10,6 +29,7 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <string>
 
 #include "open3d/Open3DConfig.h"
 #include "open3d/geometry/Image.h"
@@ -41,12 +61,14 @@
 #include "open3d/visualization/gui/Theme.h"
 #include "open3d/visualization/gui/TreeView.h"
 #include "open3d/visualization/gui/VectorEdit.h"
+#include "open3d/visualization/gui/TextEdit.h"
 #include "open3d/visualization/rendering/Model.h"
 #include "open3d/visualization/rendering/Open3DScene.h"
 #include "open3d/visualization/rendering/Scene.h"
 #include "open3d/visualization/visualizer/GuiWidgets.h"
 #include "open3d/visualization/visualizer/MessageProcessor.h"
 #include "open3d/visualization/visualizer/O3DVisualizerSelections.h"
+
 
 #define GROUPS_USE_TREE 1
 
@@ -69,6 +91,9 @@ enum MenuId {
     MENU_EXPORT_RGB,
     MENU_CLOSE,
     MENU_SETTINGS,
+    MENU_SETTINGS2,
+    MENU_SETTINGS3,
+    MENU_SETTINGS4,
     MENU_ACTIONS_BASE = 1000 /* this should be last */
 };
 
@@ -295,7 +320,6 @@ struct O3DVisualizer::Impl {
     UIState ui_state_;
     bool can_auto_show_settings_ = true;
     bool was_using_sun_follows_cam_ = false;
-
     double min_time_ = 0.0;
     double max_time_ = 0.0;
     double start_animation_clock_time_ = 0.0;
@@ -304,25 +328,47 @@ struct O3DVisualizer::Impl {
 
     Window *window_ = nullptr;
     SceneWidget *scene_ = nullptr;
+    int selected_label;
+    double alpha;
+
 
     struct {
         // We only keep pointers here because that way we don't have to release
         // all the shared_ptrs at destruction just to ensure that the gui gets
         // destroyed before the Window, because the Window will do that for us.
         Menu *actions_menu;
+        Menu *actions_menu2;
+        Menu *actions_menu3;
+        Menu *actions_menu4;
         std::unordered_map<int, std::function<void(O3DVisualizer &)>>
                 menuid2action;
+        std::unordered_map<int, std::function<void(O3DVisualizer &)>>
+                menuid2action2;
+        std::unordered_map<int, std::function<void(O3DVisualizer &)>>
+                menuid2action3;
+        std::unordered_map<int, std::function<void(O3DVisualizer &)>>
+                menuid2action4;
+        std::unordered_map<int, std::function<void(O3DVisualizer &)>>
+                menuid2action5;
 
+        
         Vert *panel;
         CollapsableVert *mouse_panel;
         TabControl *mouse_tab;
+        CollapsableVert *labeling_panel;
+        TabControl *labeling_tab;
+        Combobox *label_combo;
+        Slider *alpha_slider;
+        
+        TextEdit *path_selector;
+        Button *path_button;
         Vert *view_panel;
         SceneWidget::Controls view_mouse_mode;
         std::map<SceneWidget::Controls, Button *> mouse_buttons;
         Vert *pick_panel;
         Horiz *polygon_selection_panel;
-        Button *new_selection_set;
-        Button *delete_selection_set;
+        // Button *new_selection_set;
+        // Button *delete_selection_set;
         ListView *selection_sets;
 
         CollapsableVert *scene_panel;
@@ -347,7 +393,7 @@ struct O3DVisualizer::Impl {
         VectorEdit *sun_dir;
         ColorEdit *sun_color;
 
-        CollapsableVert *geometries_panel;
+        // CollapsableVert *geometries_panel;
         TreeView *geometries;
 #if GROUPS_USE_TREE
         std::map<std::string, TreeView::ItemId> group2itemid;
@@ -364,8 +410,18 @@ struct O3DVisualizer::Impl {
         NumberEdit *time_edit;
         SmallToggleButton *play;
 
+        EmptyIfHiddenVert *path_panel;
         EmptyIfHiddenVert *actions_panel;
+        EmptyIfHiddenVert *actions_panel2;
+        EmptyIfHiddenVert *actions_panel3;
+        EmptyIfHiddenVert *actions_panel4;
+
+        ButtonList *path_actions;
         ButtonList *actions;
+        ButtonList *actions2;
+        ButtonList *actions3;
+        ButtonList *actions4;
+        ButtonList *actions5;
     } settings;
 
     void Construct(O3DVisualizer *w) {
@@ -398,10 +454,13 @@ struct O3DVisualizer::Impl {
         o3dscene->SetBackground(ui_state_.bg_color);
 
         MakeSettingsUI();
+        //SetMouseMode(SceneWidget::Controls::FLY);
         SetMouseMode(SceneWidget::Controls::ROTATE_CAMERA);
-        SetLightingProfile(gLightingProfiles[2]);  // soft shadows
+        SetLightingProfile(gLightingProfiles[3]);  // no shadows
         SetPointSize(ui_state_.point_size);  // sync selections_' point size
         EnableSunFollowsCamera(true);
+        ShowSkybox(false);
+        //SetPicking();
     }
 
     void MakeSettingsUI() {
@@ -415,6 +474,73 @@ struct O3DVisualizer::Impl {
         Margins margins(em, 0, half_em, 0);
         Margins tabbed_margins(0, half_em, 0, 0);
 
+        // Custom actions
+        // TextEdit for path selection
+        settings.path_panel =
+                new EmptyIfHiddenVert("File Path Selection", v_spacing, margins);
+        settings.panel->AddChild(GiveOwnership(settings.path_panel));
+        settings.path_selector = new TextEdit();
+        // Button for path selection
+        settings.path_button = new SmallButton("...");
+
+        // On completion set the selected text as the text of the path_selector
+        settings.path_button->SetOnClicked([this]() {
+            auto file_dialog =  std::make_shared<gui::FileDialog>(gui::FileDialog::Mode::OPEN, "Select file to open",
+                                        window_->GetTheme());
+            file_dialog->AddFilter(".npz", "Scan data (.npz)");
+            file_dialog->SetOnCancel([this]() {
+                this->window_->CloseDialog();
+            });
+            file_dialog->SetOnDone([this](const char *path) {
+                settings.path_selector->SetText(path);
+                this->window_->CloseDialog();
+            });
+            // Cast FileDialog to Dialog and show it
+            window_->ShowDialog(file_dialog);
+        });
+        // Add the path selector and button into a single row
+        auto path_row = new Horiz(v_spacing);
+        path_row->AddChild(GiveOwnership(settings.path_selector));
+        path_row->AddChild(GiveOwnership(settings.path_button));
+        settings.path_panel->AddChild(GiveOwnership(path_row));
+        
+        settings.path_actions = new ButtonList(v_spacing);
+        settings.path_panel->AddChild(GiveOwnership(settings.path_actions));
+        
+        // Labelling Actions
+        settings.actions_panel =
+                new EmptyIfHiddenVert("Labelling", v_spacing, margins);
+        settings.panel->AddChild(GiveOwnership(settings.actions_panel));
+        settings.actions_panel->SetVisible(false);
+
+        settings.actions = new ButtonList(v_spacing);
+        settings.actions_panel->AddChild(GiveOwnership(settings.actions));
+
+        // Inference Actions
+        settings.actions_panel2 = new EmptyIfHiddenVert("Inference", v_spacing, margins);
+        settings.panel->AddChild(GiveOwnership(settings.actions_panel2));
+        settings.actions_panel2->SetVisible(false);
+
+        settings.actions2 = new ButtonList(v_spacing);
+        settings.actions_panel2->AddChild(GiveOwnership(settings.actions2));
+
+        // Model Actions
+        settings.actions_panel3 = new EmptyIfHiddenVert("Model Actions", v_spacing, margins);
+        settings.panel->AddChild(GiveOwnership(settings.actions_panel3));
+        settings.actions_panel3->SetVisible(false);
+
+        settings.actions3 = new ButtonList(v_spacing);
+        settings.actions_panel3->AddChild(GiveOwnership(settings.actions3));
+
+        // Browsing Actions
+        settings.actions_panel4 = new EmptyIfHiddenVert("Browse", v_spacing, margins);
+        settings.panel->AddChild(GiveOwnership(settings.actions_panel4));
+        settings.actions_panel4->SetVisible(false);
+
+        settings.actions4 = new ButtonList(v_spacing);
+        settings.actions_panel4->AddChild(GiveOwnership(settings.actions4));
+
+        // Mouse controls
         settings.mouse_panel =
                 new CollapsableVert("Mouse Controls", v_spacing, margins);
         settings.panel->AddChild(GiveOwnership(settings.mouse_panel));
@@ -424,18 +550,63 @@ struct O3DVisualizer::Impl {
 
         settings.view_panel = new Vert(v_spacing, tabbed_margins);
         settings.pick_panel = new Vert(v_spacing, tabbed_margins);
-        settings.mouse_tab->AddTab("Scene", GiveOwnership(settings.view_panel));
         settings.mouse_tab->AddTab("Selection",
                                    GiveOwnership(settings.pick_panel));
+        settings.mouse_tab->AddTab("Scene", GiveOwnership(settings.view_panel));
+        settings.mouse_tab->SetSelectedTabIndex(1);
         settings.mouse_tab->SetOnSelectedTabChanged([this](int tab_idx) {
             if (tab_idx == 0) {
-                SetMouseMode(settings.view_mouse_mode);
-            } else {
+                //SetMouseMode(settings.view_mouse_mode);
                 SetPicking();
+            } else {
+                SetMouseMode(settings.view_mouse_mode);
+                //SetPicking();
             }
         });
 
-        // Mouse countrols
+        // Labeling panel
+        settings.labeling_panel =
+                new CollapsableVert("Labeling Controls", v_spacing, margins);
+        settings.panel->AddChild(GiveOwnership(settings.labeling_panel));
+        
+        // CLOTHING LABELS:
+        settings.labeling_panel->AddChild(
+                std::make_shared<Label>("Clothing label"));
+        const int n_classes = 18;
+        const char* names[n_classes] = 
+        {"Hat", "Body", "Shirt", "TShirt", "Vest", "Coat", "Dress", "Skirt", "Pants", "ShortPants", "Shoes", "Hoodies", "Hair", "Swimwear", "Underwear", "Scarf", "Jumpsuit", "Jacket"};
+        const int labels[n_classes] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
+        settings.label_combo = new Combobox();
+        for (int i = 0; i < n_classes; i++) {
+            std::stringstream s;
+            s << labels[i] << " - " << names[i];
+            settings.label_combo->AddItem(s.str().c_str());
+        }
+        settings.label_combo->SetOnValueChanged([this, labels](const char *item,
+                                                        int idx) {
+            this->selected_label = labels[idx];
+        });
+        settings.labeling_panel->AddChild(GiveOwnership(settings.label_combo));
+
+        // Put spacing between label combo and alpha slider
+        settings.labeling_panel->AddFixed(v_spacing);
+        // Alpha value for blending texture
+        settings.labeling_panel->AddChild(
+                std::make_shared<Label>("Texture blend factor"));
+        settings.alpha_slider = new Slider(Slider::DOUBLE);
+        double min = 0.0;
+        double max = 1.0;
+        settings.alpha_slider->SetLimits(min, max);
+        settings.alpha_slider->SetOnValueChanged([this](double new_value) {
+            this->alpha = new_value;
+        });
+        settings.labeling_panel->AddChild(GiveOwnership(settings.alpha_slider));
+
+        settings.actions5 = new ButtonList(v_spacing);
+        settings.labeling_panel->AddChild(GiveOwnership(settings.actions5));
+        
+
+        // Mouse controls
         auto MakeMouseButton = [this](const char *name,
                                       SceneWidget::Controls type) {
             auto button = new SmallToggleButton(name);
@@ -445,12 +616,12 @@ struct O3DVisualizer::Impl {
         };
         auto *h = new Horiz(v_spacing);
         h->AddStretch();
-        h->AddChild(GiveOwnership(MakeMouseButton(
-                "Arcball", SceneWidget::Controls::ROTATE_CAMERA)));
         h->AddChild(GiveOwnership(
                 MakeMouseButton("Fly", SceneWidget::Controls::FLY)));
-        h->AddChild(GiveOwnership(
-                MakeMouseButton("Model", SceneWidget::Controls::ROTATE_MODEL)));
+        h->AddChild(GiveOwnership(MakeMouseButton(
+                "Arcball", SceneWidget::Controls::ROTATE_CAMERA)));
+        // h->AddChild(GiveOwnership(
+        //         MakeMouseButton("Model", SceneWidget::Controls::ROTATE_MODEL)));
         h->AddStretch();
         settings.view_panel->AddChild(GiveOwnership(h));
 
@@ -474,14 +645,15 @@ struct O3DVisualizer::Impl {
         settings.view_panel->AddChild(GiveOwnership(h));
 
         // Selection sets controls
-        settings.new_selection_set = new SmallButton(" + ");
-        settings.new_selection_set->SetOnClicked(
-                [this]() { NewSelectionSet(); });
-        settings.delete_selection_set = new SmallButton(" - ");
-        settings.delete_selection_set->SetOnClicked([this]() {
-            int idx = settings.selection_sets->GetSelectedIndex();
-            RemoveSelectionSet(idx);
-        });
+        // settings.new_selection_set = new SmallButton(" + ");
+        // settings.new_selection_set->SetOnClicked(
+        //         [this]() { NewSelectionSet(); });
+        // settings.delete_selection_set = new SmallButton(" - ");
+        // // TODO: Add this to API so the set can be deleted!
+        // settings.delete_selection_set->SetOnClicked([this]() {
+        //     int idx = settings.selection_sets->GetSelectedIndex();
+        //     RemoveSelectionSet(idx);
+        // });
         settings.selection_sets = new ListView();
         settings.selection_sets->SetOnValueChanged([this](const char *, bool) {
             SelectSelectionSet(settings.selection_sets->GetSelectedIndex());
@@ -492,7 +664,7 @@ struct O3DVisualizer::Impl {
                 "Cmd-click to select a point\nCmd-ctrl-click to polygon select";
 #else
         const char *selection_help =
-                "Ctrl-click to select a point\nCmd-alt-click to polygon select";
+                "Ctrl-left click to select a point\nCtrl-alt-left click to polygon select";
 #endif  // __APPLE__
         h = new Horiz();
         h->AddStretch();
@@ -506,36 +678,38 @@ struct O3DVisualizer::Impl {
         auto b = std::make_shared<SmallButton>("Select");
         b->SetOnClicked([this]() {
             scene_->DoPolygonPick(SceneWidget::PolygonPickAction::SELECT);
-            settings.polygon_selection_panel->SetVisible(false);
         });
         h->AddChild(b);
         b = std::make_shared<SmallButton>("Unselect");
         b->SetOnClicked([this]() {
             polygon_selection_unselects_ = true;
             scene_->DoPolygonPick(SceneWidget::PolygonPickAction::SELECT);
-            settings.polygon_selection_panel->SetVisible(false);
         });
         h->AddChild(b);
         b = std::make_shared<SmallButton>("Cancel");
         b->SetOnClicked([this]() {
             scene_->DoPolygonPick(SceneWidget::PolygonPickAction::CANCEL);
-            settings.polygon_selection_panel->SetVisible(false);
+            // Unselect all points
+            for (long unsigned int set_indices = 0; set_indices < selections_->GetNumberOfSets(); set_indices++) {
+                RemoveSelectionSet(set_indices);
+            }
         });
         h->AddChild(b);
         h->AddStretch();
-        h->SetVisible(false);
+        h->SetVisible(true);
         settings.pick_panel->AddChild(GiveOwnership(h));
 
-        h = new Horiz(v_spacing);
-        h->AddChild(std::make_shared<Label>("Selection Sets"));
-        h->AddStretch();
-        h->AddChild(GiveOwnership(settings.new_selection_set));
-        h->AddChild(GiveOwnership(settings.delete_selection_set));
-        settings.pick_panel->AddChild(GiveOwnership(h));
-        settings.pick_panel->AddChild(GiveOwnership(settings.selection_sets));
+        // h = new Horiz(v_spacing);
+        // h->AddChild(std::make_shared<Label>("Selection Sets"));
+        // h->AddStretch();
+        // h->AddChild(GiveOwnership(settings.new_selection_set));
+        // h->AddChild(GiveOwnership(settings.delete_selection_set));
+        // settings.pick_panel->AddChild(GiveOwnership(h));
+        // settings.pick_panel->AddChild(GiveOwnership(settings.selection_sets));
 
         // Scene controls
         settings.scene_panel = new CollapsableVert("Scene", v_spacing, margins);
+        settings.scene_panel->SetIsOpen(false);
         settings.panel->AddChild(GiveOwnership(settings.scene_panel));
 
         settings.show_skybox = new Checkbox("Show Skybox");
@@ -736,7 +910,7 @@ struct O3DVisualizer::Impl {
         grid->AddChild(GiveOwnership(settings.sun_dir));
 
         settings.sun_follows_camera = new gui::Checkbox(" ");
-        settings.sun_follows_camera->SetChecked(true);
+        settings.sun_follows_camera->SetChecked(true); // hardcoded
         settings.sun_follows_camera->SetOnChecked([this](bool checked) {
             ui_state_.sun_follows_camera = checked;
             this->SetUIState(ui_state_);
@@ -762,12 +936,13 @@ struct O3DVisualizer::Impl {
         settings.light_panel->AddChild(GiveOwnership(grid));
 
         // Geometry list
-        settings.geometries_panel =
-                new CollapsableVert("Geometries", v_spacing, margins);
-        settings.panel->AddChild(GiveOwnership(settings.geometries_panel));
+        // settings.geometries_panel =
+        //         new CollapsableVert("Geometries", v_spacing, margins);
+        // settings.panel->AddChild(GiveOwnership(settings.geometries_panel));
 
         settings.geometries = new TreeView();
-        settings.geometries_panel->AddChild(GiveOwnership(settings.geometries));
+        // settings.geometries_panel->AddChild(GiveOwnership(settings.geometries));
+        // settings.geometries_panel->SetIsOpen(false);
 
 #if !GROUPS_USE_TREE
         // Groups
@@ -811,15 +986,6 @@ struct O3DVisualizer::Impl {
 
         settings.time_panel->SetVisible(false);  // hide until we add a
                                                  // geometry with time
-
-        // Custom actions
-        settings.actions_panel =
-                new EmptyIfHiddenVert("Custom Actions", v_spacing, margins);
-        settings.panel->AddChild(GiveOwnership(settings.actions_panel));
-        settings.actions_panel->SetVisible(false);
-
-        settings.actions = new ButtonList(v_spacing);
-        settings.actions_panel->AddChild(GiveOwnership(settings.actions));
 
         // Picking callbacks
         scene_->SetOnStartedPolygonPicking([this]() {
@@ -941,24 +1107,11 @@ struct O3DVisualizer::Impl {
 
             // Finally assign material properties if geometry is a triangle mesh
             if (tmesh && tmesh->materials_.size() > 0) {
-                std::size_t material_index;
-                if (tmesh->HasTriangleMaterialIds()) {
-                    auto minmax_it = std::minmax_element(
-                            tmesh->triangle_material_ids_.begin(),
-                            tmesh->triangle_material_ids_.end());
-                    if (*minmax_it.first != *minmax_it.second) {
-                        utility::LogWarning(
-                                "Only a single material is "
-                                "supported for TriangleMesh visualization, "
-                                "only the first referenced material will be "
-                                "used. Use TriangleMeshModel if more than one "
-                                "material is required.");
-                    }
-                    material_index = *minmax_it.first;
-                } else {
-                    material_index = 0;
-                }
-                auto &mesh_material = tmesh->materials_[material_index].second;
+                // Only a single material is supported for TriangleMesh so we
+                // just grab the first one we find. Users should be using
+                // TriangleMeshModel if they have a model with multiple
+                // materials.
+                auto &mesh_material = tmesh->materials_.begin()->second;
                 mat.base_color = {mesh_material.baseColor.r(),
                                   mesh_material.baseColor.g(),
                                   mesh_material.baseColor.b(),
@@ -1034,6 +1187,22 @@ struct O3DVisualizer::Impl {
         // depend on the bounds.
         SetPointSize(ui_state_.point_size);
 
+
+        int selected_tab = settings.mouse_tab->GetSelectedTabIndex();
+        if (selected_tab == 0) {
+            if (selections_->GetNumberOfSets() == 0) {
+                NewSelectionSet();
+            }
+            if (selections_need_update_) {
+                UpdateSelectableGeometry();
+            }
+            if (selections_->IsActive()) {
+                selections_->MakeInactive();
+            } 
+            selections_->MakeActive();
+        } else {
+            SetMouseMode(settings.view_mouse_mode);
+        }
         scene_->ForceRedraw();
     }
 
@@ -1054,13 +1223,25 @@ struct O3DVisualizer::Impl {
         scene_->ForceRedraw();
     }
 
+    void RemoveGeometryAndData(const std::string &name) {
+        // Remove all selection sets from selections_ 
+        for (long unsigned int set_indices = 0; set_indices < selections_->GetNumberOfSets(); set_indices++) {
+            RemoveSelectionSet(set_indices);
+        }
+
+        for (size_t i = 0; i < objects_.size(); ++i) {
+            RemoveGeometry(objects_[i].name);
+        }
+    }
+
+
     void RemoveGeometry(const std::string &name) {
         std::string group;
         for (size_t i = 0; i < objects_.size(); ++i) {
             if (objects_[i].name == name) {
                 group = objects_[i].group;
-                settings.object2itemid.erase(objects_[i].name);
                 objects_.erase(objects_.begin() + i);
+                settings.object2itemid.erase(objects_[i].name);
                 break;
             }
         }
@@ -1094,6 +1275,14 @@ struct O3DVisualizer::Impl {
         // Bounds have changed, so update the selection point size, since they
         // depend on the bounds.
         SetPointSize(ui_state_.point_size);
+
+        
+        // if (selections_->GetNumberOfSets() == 0) {
+        //     NewSelectionSet();
+        // }
+        // if (selections_need_update_) {
+        //     UpdateSelectableGeometry();
+        // }
 
         scene_->ForceRedraw();
     }
@@ -1398,6 +1587,9 @@ struct O3DVisualizer::Impl {
         auto menubar = Application::GetInstance().GetMenubar();
         if (menubar) {  // might not have been created yet
             menubar->SetChecked(MENU_SETTINGS, show);
+            menubar->SetChecked(MENU_SETTINGS2, show);
+            menubar->SetChecked(MENU_SETTINGS3, show);
+            menubar->SetChecked(MENU_SETTINGS4, show);
         }
         window_->SetNeedsLayout();
     }
@@ -1466,8 +1658,8 @@ struct O3DVisualizer::Impl {
         settings.use_sun->SetEnabled(enable);
         settings.sun_dir->SetEnabled(enable);
         settings.sun_color->SetEnabled(enable);
-        settings.mouse_buttons[SceneWidget::Controls::ROTATE_SUN]->SetEnabled(
-                enable);
+        //settings.mouse_buttons[SceneWidget::Controls::ROTATE_SUN]->SetEnabled(enable);
+        //settings.mouse_buttons[SceneWidget::Controls::ROTATE_CAMERA]->SetEnabled(enable);
         settings.sun_follows_camera->SetEnabled(enable);
         settings.wireframe_mode->SetEnabled(enable);
     }
@@ -1534,9 +1726,6 @@ struct O3DVisualizer::Impl {
 
         px = int(ConvertToScaledPixels(px));
         for (auto &o : objects_) {
-            // Ignore Models since they can never be point clouds
-            if (o.model) continue;
-
             o.material.point_size = float(px);
             OverrideMaterial(o.name, o.material, ui_state_.scene_shader);
         }
@@ -1562,9 +1751,6 @@ struct O3DVisualizer::Impl {
 
         px = int(ConvertToScaledPixels(px));
         for (auto &o : objects_) {
-            // Ignore Models since they can never be point clouds
-            if (o.model) continue;
-
             o.material.line_width = float(px);
             OverrideMaterial(o.name, o.material, ui_state_.scene_shader);
         }
@@ -1669,7 +1855,8 @@ struct O3DVisualizer::Impl {
     }
 
     void SetLightingProfile(const LightingProfile &profile) {
-        Eigen::Vector3f sun_dir = {0.577f, -0.577f, -0.577f};
+        // Eigen::Vector3f sun_dir = {0.f, -0.577f, -0.577f};
+        Eigen::Vector3f sun_dir = {0.f, -0.500f, -0.500f};
         auto scene = scene_->GetScene();
         scene->SetLighting(profile.profile, sun_dir);
         ui_state_.use_ibl =
@@ -1717,6 +1904,22 @@ struct O3DVisualizer::Impl {
     std::vector<O3DVisualizerSelections::SelectionSet> GetSelectionSets()
             const {
         return selections_->GetSets();
+    }
+
+    int GetNumberOfSelectionSets(){
+        return selections_->GetNumberOfSets();
+    }
+
+    int GetSelectedSet(){
+        return settings.selection_sets->GetSelectedIndex();
+    }
+
+    int GetSelectedLabel() {
+        return selected_label;
+    }
+
+    double GetSliderValue() {
+        return alpha;
     }
 
     void SetCurrentTime(double t) {
@@ -1824,6 +2027,7 @@ struct O3DVisualizer::Impl {
 
         settings.use_ibl->SetChecked(ui_state_.use_ibl);
         settings.use_sun->SetChecked(ui_state_.use_sun);
+        // settings.use_sun->SetChecked(false);
         settings.ibl_intensity->SetValue(ui_state_.ibl_intensity);
         settings.sun_intensity->SetValue(ui_state_.sun_intensity);
         settings.sun_dir->SetValue(ui_state_.sun_dir);
@@ -1835,11 +2039,13 @@ struct O3DVisualizer::Impl {
         if (ui_state_.sun_follows_camera) {
             settings.sun_dir->SetEnabled(false);
             settings.mouse_buttons[SceneWidget::Controls::ROTATE_SUN]
-                    ->SetEnabled(false);
+                   ->SetEnabled(false);
+            // settings.mouse_buttons[SceneWidget::Controls::FLY]->SetEnabled(false);
         } else {
             settings.sun_dir->SetEnabled(true);
             settings.mouse_buttons[SceneWidget::Controls::ROTATE_SUN]
-                    ->SetEnabled(true);
+                   ->SetEnabled(true);
+            // settings.mouse_buttons[SceneWidget::Controls::FLY]->SetEnabled(true);
         }
 
         if (is_new_lighting) {
@@ -2045,32 +2251,12 @@ struct O3DVisualizer::Impl {
 
     void UpdateSelectableGeometry() {
         std::vector<SceneWidget::PickableGeometry> pickable;
-        // Count number of meshes stored in TriangleMeshModels
-        size_t model_mesh_count = 0;
-        size_t model_count = 0;
+        pickable.reserve(objects_.size());
         for (auto &o : objects_) {
             if (!IsGeometryVisible(o)) {
                 continue;
             }
-            if (o.model.get()) {
-                model_count++;
-                model_mesh_count += o.model.get()->meshes_.size();
-            }
-        }
-        pickable.reserve(objects_.size() + model_mesh_count - model_count);
-        for (auto &o : objects_) {
-            if (!IsGeometryVisible(o)) {
-                continue;
-            }
-            if (o.model.get()) {
-                for (auto &g : o.model->meshes_) {
-                    pickable.emplace_back(g.mesh_name, g.mesh.get(),
-                                          o.tgeometry.get());
-                }
-            } else {
-                pickable.emplace_back(o.name, o.geometry.get(),
-                                      o.tgeometry.get());
-            }
+            pickable.emplace_back(o.name, o.geometry.get(), o.tgeometry.get());
         }
         selections_->SetSelectableGeometry(pickable);
     }
@@ -2112,7 +2298,7 @@ struct O3DVisualizer::Impl {
                 (std::string("Open3D ") + OPEN3D_VERSION).c_str());
         auto text = std::make_shared<gui::Label>(
                 "The MIT License (MIT)\n"
-                "Copyright (c) 2018-2023 www.open3d.org\n\n"
+                "Copyright (c) 2018-2021 www.open3d.org\n\n"
 
                 "Permission is hereby granted, free of charge, to any person "
                 "obtaining a copy of this software and associated "
@@ -2239,6 +2425,9 @@ O3DVisualizer::O3DVisualizer(const std::string &title, int width, int height)
     // window, since the whole point of this class is to have an easy way to
     // visualize something with a blocking call to draw().
     auto menu = std::make_shared<Menu>();
+    auto menu2 = std::make_shared<Menu>();
+    auto menu3 = std::make_shared<Menu>();
+    auto menu4 = std::make_shared<Menu>();
 #if defined(__APPLE__)
     // The first menu item to be added on macOS becomes the application
     // menu (no matter its name)
@@ -2261,6 +2450,24 @@ O3DVisualizer::O3DVisualizer(const std::string &title, int width, int height)
     menu->AddMenu("Actions", actions_menu);
     impl_->settings.actions_menu = actions_menu.get();
 
+    auto actions_menu2 = std::make_shared<Menu>();
+    actions_menu2->AddItem("Show Settings", MENU_SETTINGS2);
+    actions_menu2->SetChecked(MENU_SETTINGS2, false);
+    menu->AddMenu("Labelling Actions", actions_menu2);
+    impl_->settings.actions_menu2 = actions_menu2.get();
+
+    auto actions_menu3 = std::make_shared<Menu>();
+    actions_menu3->AddItem("Show Settings", MENU_SETTINGS3);
+    actions_menu3->SetChecked(MENU_SETTINGS3, false);
+    menu->AddMenu("Model Actions", actions_menu3);
+    impl_->settings.actions_menu3 = actions_menu3.get();
+
+    auto actions_menu4 = std::make_shared<Menu>();
+    actions_menu4->AddItem("Show Settings", MENU_SETTINGS4);
+    actions_menu4->SetChecked(MENU_SETTINGS4, false);
+    menu->AddMenu("Browsing Actions", actions_menu4);
+    impl_->settings.actions_menu4 = actions_menu4.get();
+
 #if !defined(__APPLE__)
     auto help_menu = std::make_shared<Menu>();
     help_menu->AddItem("About", MENU_ABOUT);
@@ -2275,6 +2482,12 @@ O3DVisualizer::O3DVisualizer(const std::string &title, int width, int height)
     SetOnMenuItemActivated(MENU_CLOSE, [this]() { this->impl_->OnClose(); });
     SetOnMenuItemActivated(MENU_SETTINGS,
                            [this]() { this->impl_->OnToggleSettings(); });
+    SetOnMenuItemActivated(MENU_SETTINGS2,
+                           [this]() { this->impl_->OnToggleSettings(); });
+    SetOnMenuItemActivated(MENU_SETTINGS3,
+                            [this]() { this->impl_->OnToggleSettings(); });
+    SetOnMenuItemActivated(MENU_SETTINGS4,
+                            [this]() { this->impl_->OnToggleSettings(); });
 
     impl_->ShowSettings(false, false);
 }
@@ -2304,9 +2517,27 @@ void O3DVisualizer::StopRPCInterface() {
     impl_->receiver_.reset();
 }
 
+// Add button to the "Path Selection" segment in the UI
+void O3DVisualizer::PathAddAction(const std::string &name,
+                              std::function<void(O3DVisualizer &)> callback) {
+    SmallButton *button = new SmallButton(name.c_str());
+    button->SetOnClicked([this, callback]() { callback(*this); });
+    impl_->settings.path_actions->AddChild(GiveOwnership(button));
+
+    SetNeedsLayout();
+    impl_->settings.path_panel->SetVisible(true);
+    impl_->settings.path_panel->SetIsOpen(true);
+
+    if (impl_->can_auto_show_settings_ &&
+        impl_->settings.path_actions->size() == 1) {
+        impl_->ShowSettings(true);
+    }
+}
+
+
+// Add button to the "Labelling Actions" segment in the UI
 void O3DVisualizer::AddAction(const std::string &name,
                               std::function<void(O3DVisualizer &)> callback) {
-    // Add button to the "Custom Actions" segment in the UI
     SmallButton *button = new SmallButton(name.c_str());
     button->SetOnClicked([this, callback]() { callback(*this); });
     impl_->settings.actions->AddChild(GiveOwnership(button));
@@ -2329,6 +2560,128 @@ void O3DVisualizer::AddAction(const std::string &name,
     impl_->settings.menuid2action[id] = callback;
     SetOnMenuItemActivated(id, [this, callback]() { callback(*this); });
 }
+
+// Add button to the "Labelling Actions" segment in the UI
+void O3DVisualizer::LabellingAddAction(const std::string &name,
+                              std::function<void(O3DVisualizer &)> callback) {
+    SmallButton *button = new SmallButton(name.c_str());
+    button->SetOnClicked([this, callback]() { callback(*this); });
+    impl_->settings.actions->AddChild(GiveOwnership(button));
+
+    SetNeedsLayout();
+    impl_->settings.actions_panel->SetVisible(true);
+    impl_->settings.actions_panel->SetIsOpen(true);
+
+    if (impl_->can_auto_show_settings_ &&
+        impl_->settings.actions->size() == 1) {
+        impl_->ShowSettings(true);
+    }
+
+    // Add menu item
+    if (impl_->settings.menuid2action.empty()) {
+        impl_->settings.actions_menu->AddSeparator();
+    }
+    int id = MENU_ACTIONS_BASE + int(impl_->settings.menuid2action.size());
+    impl_->settings.actions_menu->AddItem(name.c_str(), id);
+    impl_->settings.menuid2action[id] = callback;
+    SetOnMenuItemActivated(id, [this, callback]() { callback(*this); });
+}
+
+// Add button to the "Inference Actions" segment in the UI
+void O3DVisualizer::InferenceAddAction(const std::string &name,
+                              std::function<void(O3DVisualizer &)> callback) {
+    SmallButton *button = new SmallButton(name.c_str());
+    button->SetOnClicked([this, callback]() { callback(*this); });
+    impl_->settings.actions2->AddChild(GiveOwnership(button));
+
+    SetNeedsLayout();
+    impl_->settings.actions_panel2->SetVisible(true);
+    impl_->settings.actions_panel2->SetIsOpen(true);
+
+    if (impl_->can_auto_show_settings_ &&
+        impl_->settings.actions2->size() == 1) {
+        impl_->ShowSettings(true);
+    }
+
+    // Add menu item
+    if (impl_->settings.menuid2action2.empty()) {
+        impl_->settings.actions_menu2->AddSeparator();
+    }
+    int id = 2000 + int(impl_->settings.menuid2action2.size());
+    impl_->settings.actions_menu2->AddItem(name.c_str(), id);
+    impl_->settings.menuid2action2[id] = callback;
+    SetOnMenuItemActivated(id, [this, callback]() { callback(*this); });
+}
+
+// Add button to the "Model Actions" segment in the UI
+void O3DVisualizer::ModelAddAction(const std::string &name,
+                              std::function<void(O3DVisualizer &)> callback) {
+    SmallButton *button = new SmallButton(name.c_str());
+    button->SetOnClicked([this, callback]() { callback(*this); });
+    impl_->settings.actions3->AddChild(GiveOwnership(button));
+
+    SetNeedsLayout();
+    impl_->settings.actions_panel3->SetVisible(true);
+    impl_->settings.actions_panel3->SetIsOpen(true);
+
+    if (impl_->can_auto_show_settings_ &&
+        impl_->settings.actions3->size() == 1) {
+        impl_->ShowSettings(true);
+    }
+
+    // Add menu item
+    if (impl_->settings.menuid2action3.empty()) {
+        impl_->settings.actions_menu3->AddSeparator();
+    }
+    int id = 3000 + int(impl_->settings.menuid2action3.size());
+    impl_->settings.actions_menu3->AddItem(name.c_str(), id);
+    impl_->settings.menuid2action3[id] = callback;
+    SetOnMenuItemActivated(id, [this, callback]() { callback(*this); });
+}
+
+// Add button to the "Browsing Actions" segment in the UI
+void O3DVisualizer::BrowsingAddAction(const std::string &name,
+                              std::function<void(O3DVisualizer &)> callback) {
+    SmallButton *button = new SmallButton(name.c_str());
+    button->SetOnClicked([this, callback]() { callback(*this); });
+    impl_->settings.actions4->AddChild(GiveOwnership(button));
+
+    SetNeedsLayout();
+    impl_->settings.actions_panel4->SetVisible(true);
+    impl_->settings.actions_panel4->SetIsOpen(true);
+
+    if (impl_->can_auto_show_settings_ &&
+        impl_->settings.actions4->size() == 1) {
+        impl_->ShowSettings(true);
+    }
+
+    // Add menu item
+    if (impl_->settings.menuid2action4.empty()) {
+        impl_->settings.actions_menu4->AddSeparator();
+    }
+    int id = 4000 + int(impl_->settings.menuid2action4.size());
+    impl_->settings.actions_menu4->AddItem(name.c_str(), id);
+    impl_->settings.menuid2action4[id] = callback;
+    SetOnMenuItemActivated(id, [this, callback]() { callback(*this); });
+}
+
+// Add button to the "Labelling Control" segment in the UI
+void O3DVisualizer::LabellingControlAddAction(const std::string &name,
+                              std::function<void(O3DVisualizer &)> callback) {
+    SmallButton *button = new SmallButton(name.c_str());
+    button->SetOnClicked([this, callback]() { callback(*this); });
+    impl_->settings.actions5->AddChild(GiveOwnership(button));
+
+    SetNeedsLayout();
+    impl_->settings.labeling_panel->SetVisible(true);
+    impl_->settings.labeling_panel->SetIsOpen(true);
+
+    if (impl_->can_auto_show_settings_ &&
+        impl_->settings.actions5->size() == 1) {
+        impl_->ShowSettings(true);
+    }
+}
+
 
 void O3DVisualizer::SetBackground(
         const Eigen::Vector4f &bg_color,
@@ -2385,6 +2738,10 @@ void O3DVisualizer::UpdateGeometry(const std::string &name,
 
 void O3DVisualizer::RemoveGeometry(const std::string &name) {
     return impl_->RemoveGeometry(name);
+}
+
+void O3DVisualizer::RemoveGeometryAndData(const std::string &name) {
+    return impl_->RemoveGeometryAndData(name);
 }
 
 void O3DVisualizer::ShowGeometry(const std::string &name, bool show) {
@@ -2517,6 +2874,29 @@ void O3DVisualizer::SetupCamera(const Eigen::Matrix3d &intrinsic,
 void O3DVisualizer::ResetCameraToDefault() {
     return impl_->ResetCameraToDefault();
 }
+
+int O3DVisualizer::GetSelectedLabel() {
+    return impl_->selected_label;
+}
+
+int O3DVisualizer::GetSelectedSet() {
+    return impl_->settings.selection_sets->GetSelectedIndex();
+}
+
+int O3DVisualizer::GetNumberOfSelectionSets() {
+    return impl_->selections_->GetNumberOfSets();
+}
+
+// Get text from path selector in the UI
+std::string O3DVisualizer::GetSelectedPath() {
+    return impl_->settings.path_selector->GetText();
+}
+
+// Get value from slider in the UI
+double O3DVisualizer::GetSliderValue() {
+    return impl_->alpha;
+}
+
 
 O3DVisualizer::UIState O3DVisualizer::GetUIState() const {
     return impl_->ui_state_;

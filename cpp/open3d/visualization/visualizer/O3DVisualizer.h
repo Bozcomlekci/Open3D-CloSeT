@@ -1,8 +1,27 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// Copyright (c) 2018-2023 www.open3d.org
-// SPDX-License-Identifier: MIT
+// The MIT License (MIT)
+//
+// Copyright (c) 2018-2021 www.open3d.org
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
 // ----------------------------------------------------------------------------
 
 #pragma once
@@ -57,7 +76,7 @@ public:
 
     struct UIState {
         gui::SceneWidget::Controls mouse_mode =
-                gui::SceneWidget::Controls::ROTATE_CAMERA;
+                gui::SceneWidget::Controls::FLY;
         Shader scene_shader = Shader::STANDARD;
         bool show_settings = false;
         bool show_skybox = true;
@@ -89,8 +108,43 @@ public:
     O3DVisualizer(const std::string& title, int width, int height);
     virtual ~O3DVisualizer();
 
-    void AddAction(const std::string& name,
+    void PathAddAction(const std::string& name,
                    std::function<void(O3DVisualizer&)> callback);
+    
+    void AddAction(const std::string& name,
+                    std::function<void(O3DVisualizer&)> callback);
+
+    void LabellingAddAction(const std::string& name,
+                    std::function<void(O3DVisualizer&)> callback);
+
+    void InferenceAddAction(const std::string& name,
+                    std::function<void(O3DVisualizer&)> callback);
+
+    void ModelAddAction(const std::string& name,
+                    std::function<void(O3DVisualizer&)> callback);
+    
+    void BrowsingAddAction(const std::string& name,
+                    std::function<void(O3DVisualizer&)> callback);
+
+    void LabellingControlAddAction(const std::string& name,
+                std::function<void(O3DVisualizer&)> callback);
+    
+    // void AddSlider(const std::string& name,
+    //                std::function<void(O3DVisualizer&, double)> callback);
+
+    int GetSelectedLabel();
+
+    // Get text inside the path selector
+    std::string GetSelectedPath();
+
+    // Get double value inside the slider
+    double GetSliderValue();
+
+    // Get selected pc set
+    int GetSelectedSet();
+
+    // Get number of pc sets
+    int GetNumberOfSelectionSets();
 
     void SetBackground(const Eigen::Vector4f& bg_color,
                        std::shared_ptr<geometry::Image> bg_image = nullptr);
@@ -124,6 +178,9 @@ public:
 
     /// Removes the named geometry from the Visualizer
     void RemoveGeometry(const std::string& name);
+
+    /// Removes the geometry and all its associated data from the Visualizer like pcs
+    void RemoveGeometryAndData(const std::string& name);
 
     /// Updates `update_flags` attributes of named geometry with the matching
     /// attributes from `tgeom`
